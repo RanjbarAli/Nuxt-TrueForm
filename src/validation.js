@@ -1,16 +1,14 @@
 import trans from './trans'
 import * as ruleHelpers from './rules'
 
-export const resolveProperty = ({ default: def = null, name = null, rules }, key) => {
-  if (!rules || !name) {
+export const resolveProperty = ({ default: def = null, name = null }, key) => {
+  if (!name) {
     throw new TypeError(trans('set-rules-and-name'))
   }
 
   const model = ref(def)
 
   name ??= key
-
-  const resolvedRules = resolveRules(rules, name)
 
   const returnedRef = reactive({
     data: model,
@@ -20,13 +18,6 @@ export const resolveProperty = ({ default: def = null, name = null, rules }, key
     default: def,
     name,
   })
-
-  watch(model, (newVal) => {
-    const validator = validate(name, newVal, resolvedRules)
-    returnedRef.isDirty = true
-    returnedRef.error = validator || ''
-    returnedRef.isValid = validator == null
-  }, { deep: true })
 
   return returnedRef
 }
@@ -61,12 +52,23 @@ export const TrueForm = (properties = {}) => {
     throw new TypeError(trans('properties-must-object'))
   }
 
-  const props = Object.entries(properties).map(([key, value]) => {
+  let props = Object.entries(properties).map(([key, value]) => {
     if (typeof value !== 'object') {
       throw new TypeError(trans('properties-must-object'))
     }
-    return [key, resolveProperty(value, key)]
+    return [key, reactive({ ...resolveProperty(value, key), rules: value.rules })]
   })
+  console.log(typeof props, props)
+  /*props = props.map(([key, property]) => {
+    const resolvedRules = resolveRules(property.rules, property.name)
+    const otherProps = Object.fromEntries(props.filter(([k]) => k != key).map(([k, v]) => [[k, v.data]]))
+    watch(model, (newVal) => {
+      const validator = validate(property.name, newVal, resolvedRules, otherProps)
+      property.isDirty = true
+      property.error = validator || ''
+      property.isValid = validator == null
+    }, { deep: true })
+  })*/
 
   return reactive({
     ...Object.fromEntries(props),
@@ -76,14 +78,14 @@ export const TrueForm = (properties = {}) => {
   })
 }
 
-export const validate = (name, value, rules = {}) => {
+export const validate = (name, value, rules = {}, otherProps = {}) => {
   if (rules.unload && value.length === 0) return ''
   delete rules.unload
 
   for (const rule of Object.keys(rules)) {
     const pipeline = (typeof rules[rule] === 'function')
       ? rules[rule](value)
-      : ruleHelpers[rule](value, ...(rules[rule]))
+      : ruleHelpers[rule](value, ...(rules[rule]), otherProps)
 
     if (!pipeline.status) {
       return pipeline.message.replace(':attribute:', name)
