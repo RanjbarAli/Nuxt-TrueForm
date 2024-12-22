@@ -1,25 +1,55 @@
 import trans from './trans'
 import * as ruleHelpers from './rules'
 
-export const resolveProperty = ({ default: def = null, name = null }, key) => {
-  if (!name) {
-    throw new TypeError(trans('set-rules-and-name'))
+export const TrueForm = (properties = {}) => {
+  if (typeof properties !== 'object') {
+    throw new TypeError(trans('properties-must-object'))
   }
 
-  const model = ref(def)
+  const propertiesRef = {}
 
-  name ??= key
-
-  const returnedRef = reactive({
-    data: model,
-    error: '',
-    isDirty: false,
-    isValid: false,
-    default: def,
-    name,
+  let props = Object.entries(properties).map(([key, property]) => {
+    if (typeof property !== 'object') {
+      throw new TypeError(trans('properties-must-object'))
+    }
+    property.name ??= key
+    propertiesRef[key] = {
+      data: ref(property.default),
+      name: property.name,
+      rules: resolveRules(property?.rules, property.name)
+    }
+    const prop = reactive({
+      name: property.name,
+      data: propertiesRef[key].data,
+      default: property.default,
+      error: '',
+      isDirty: false,
+      isValid: false,
+    })
+    return [key, prop]
   })
 
-  return returnedRef
+  props = props.map(([key, prop]) => {
+    const watchers = [propertiesRef[key].data]
+    Object.entries(propertiesRef[key].rules).forEach(([name, params]) => {
+      if (name.startsWith('_')) watchers.push( propertiesRef[params[0]].data )
+    })
+    watch(watchers, () => {
+      const otherProps = Object.fromEntries(Object.entries(propertiesRef).filter(([k]) => k != key).map(([key, { data, name }]) => [key, { data, name }]))
+      const validator = validate(prop.name, propertiesRef[key].data.value, propertiesRef[key].rules, otherProps)
+      prop.isDirty = true
+      prop.error = validator || ''
+      prop.isValid = validator == null
+    }, { deep: true })
+    return [key, prop]
+  })
+
+  return reactive({
+    ...Object.fromEntries(props),
+    isValid: computed(() => props.every(([, value]) => value.isValid)),
+    errors: computed(() => props.flatMap(([, value]) => value?.error || [])),
+    isDirty: computed(() => props.some(([, value]) => value.isDirty)),
+  })
 }
 
 export const resolveRules = (rules, name) => {
@@ -45,37 +75,7 @@ export const resolveRules = (rules, name) => {
       return acc
     }, {})
   }
-}
-
-export const TrueForm = (properties = {}) => {
-  if (typeof properties !== 'object') {
-    throw new TypeError(trans('properties-must-object'))
-  }
-
-  let props = Object.entries(properties).map(([key, value]) => {
-    if (typeof value !== 'object') {
-      throw new TypeError(trans('properties-must-object'))
-    }
-    return [key, reactive({ ...resolveProperty(value, key), rules: value.rules })]
-  })
-  console.log(typeof props, props)
-  /*props = props.map(([key, property]) => {
-    const resolvedRules = resolveRules(property.rules, property.name)
-    const otherProps = Object.fromEntries(props.filter(([k]) => k != key).map(([k, v]) => [[k, v.data]]))
-    watch(model, (newVal) => {
-      const validator = validate(property.name, newVal, resolvedRules, otherProps)
-      property.isDirty = true
-      property.error = validator || ''
-      property.isValid = validator == null
-    }, { deep: true })
-  })*/
-
-  return reactive({
-    ...Object.fromEntries(props),
-    isValid: computed(() => props.every(([, value]) => value.isValid)),
-    errors: computed(() => props.flatMap(([, value]) => value?.error || [])),
-    isDirty: computed(() => props.some(([, value]) => value.isDirty)),
-  })
+  return rules
 }
 
 export const validate = (name, value, rules = {}, otherProps = {}) => {
@@ -84,7 +84,7 @@ export const validate = (name, value, rules = {}, otherProps = {}) => {
 
   for (const rule of Object.keys(rules)) {
     const pipeline = (typeof rules[rule] === 'function')
-      ? rules[rule](value)
+      ? rules[rule](value, otherProps)
       : ruleHelpers[rule](value, ...(rules[rule]), otherProps)
 
     if (!pipeline.status) {

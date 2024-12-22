@@ -15,16 +15,10 @@ export default defineNuxtModule({
       lang: langOption,
     }
     const resolver = createResolver(import.meta.url)
-    const validation = resolver.resolve('./validation.js')
-    addImports({
-      name: 'TrueInput',
-      as: 'TrueInput',
-      from: validation,
-    })
     addImports({
       name: 'TrueForm',
       as: 'TrueForm',
-      from: validation,
+      from: resolver.resolve('./validation.js'),
     })
   },
 })

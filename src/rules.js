@@ -8,7 +8,6 @@ export const required = (a) => {
 }
 export const email = (a) => {
   return {
-    // eslint-disable-next-line regexp/no-super-linear-backtracking
     status: a.match(/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})$/),
     message: trans('email'),
   }
@@ -21,7 +20,7 @@ export const url = (a) => {
 }
 export const phone = (a) => {
   return {
-    status: a.match(/^09\d{9}$/),
+    status: a.match(/^\+?[1-9]\d{0,14}$/),
     message: trans('phone'),
   }
 }
@@ -44,10 +43,27 @@ export const length = (a, len) => {
     message: trans('length', { len }),
   }
 }
-
 export const regex = (a, regex) => {
   return {
     status: a.match(new RegExp(regex)),
     message: trans('regex'),
+  }
+}
+export const _same = (a, sameWith, otherProps) => {
+  return {
+    status: a == otherProps[sameWith].data.value,
+    message: trans('same', { same: otherProps[sameWith].name }),
+  }
+}
+export const starts = (a, str) => {
+  return {
+    status: a.startsWith(str),
+    message: trans('starts', { str }),
+  }
+}
+export const ends = (a, str) => {
+  return {
+    status: a.endsWith(str),
+    message: trans('ends', { str }),
   }
 }
